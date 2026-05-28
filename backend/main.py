@@ -1,11 +1,13 @@
 import os
 import re
-from datetime import datetime
 
+import numpy as np
 import requests
 import sounddevice as sd
+
 from scipy.io.wavfile import write
 from faster_whisper import WhisperModel
+from datetime import datetime
 
 SAMPLE_RATE = 16000
 RECORDINGS_DIR = "../recordings"
@@ -16,20 +18,43 @@ os.makedirs(RECORDINGS_DIR, exist_ok=True)
 os.makedirs(NOTES_DIR, exist_ok=True)
 
 
-def record_audio(seconds: int = 30) -> str:
+def record_audio() -> str:
     filename = f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
     path = os.path.join(RECORDINGS_DIR, filename)
 
-    print(f"Recording for {seconds} seconds...")
-    audio = sd.rec(
-        int(seconds * SAMPLE_RATE),
+    input("Press ENTER to start recording...")
+    print("Recording started. Press ENTER again to stop.")
+
+    recording = []
+    is_recording = True
+
+    def callback(indata, frames, time, status):
+        if status:
+            print(status)
+
+        if is_recording:
+            recording.append(indata.copy())
+
+    stream = sd.InputStream(
         samplerate=SAMPLE_RATE,
         channels=1,
         dtype="int16",
+        callback=callback,
     )
-    sd.wait()
 
+    stream.start()
+    input()
+
+    is_recording = False
+    stream.stop()
+    stream.close()
+
+    if not recording:
+        raise RuntimeError("No audio was recorded.")
+
+    audio = np.concatenate(recording, axis=0)
     write(path, SAMPLE_RATE, audio)
+
     print(f"Saved recording: {path}")
     return path
 
@@ -165,7 +190,7 @@ Bestand: `{filename}`
 
 
 if __name__ == "__main__":
-    audio_path = record_audio(seconds=30)
+    audio_path = record_audio()
 
     transcript = transcribe_audio(audio_path)
 
